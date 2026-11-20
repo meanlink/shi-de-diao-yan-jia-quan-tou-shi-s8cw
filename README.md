@@ -3,8 +3,16 @@
 加权透视汇总的真实业务分析小型项目。完整模拟客户、痛点、上下游、算法公式与一天工作剧本见 [BUSINESS.md](BUSINESS.md)。
 
 ## 模块与业务流程
-数据接入（JSON/CSV、字段验证、批次指纹）→ 参数化分析（异步 Python worker）→ 结果复核（指标、图形、明细、解释、批准）→ 定时分发（本地收件箱、CSV/JSON、SHA256）；另有业务总览和审计轨迹。
-三个贯穿全栈的实体：Dataset 数据批次、Job 分析任务、Report 分发计划；辅助 User、Audit、Delivery。
+数据接入（JSON/CSV、字段验证、批次指纹）→ 参数化分析（异步 Python worker）→ 结果复核（指标、图形、明细、解释、批准）→ 独立复测（重叠辨认、沿用权重的差值方向对照、凭证签发与日表占用）→ 定时分发（本地收件箱、CSV/JSON、SHA256）；另有业务总览和审计轨迹。
+三个贯穿全栈的实体：Dataset 数据批次、Job 分析任务、Report 分发计划；辅助 User、Audit、Delivery，以及独立复测的 RetestBatch 复测日表与 RetestVoucher 复测凭证。
+
+### 独立复测（防伪）
+已获批分析可在「独立复测」页用另一张观察日表复测，防止“改几个数重新上传冒充独立复测”：
+- 沿用原分析权重参数，只对照两队加权 A−B 差值方向，不另选口径；
+- 按 (日, 队, 区域) 辨认观察，与原分析批次有重叠的日表不能参评，试算阶段即标出撞批；
+- 重叠候选可各自试算（不占日表）；签发时同一原分析的复测日表只用一次，并发同样只成一张凭证；
+- 日表占用与凭证在同一事务生效；`request_key` 幂等，中断后恢复同次签发，重试不重复占用、不重复生成简报；worker 启动与每轮 tick 自动补齐待签凭证；
+- 待签与已签凭证均可查询，下载简报（CSV/JSON）附原分析与复测两份结论、批次指纹与方向对照。
 
 ## 快速启动
 ```bash
@@ -30,6 +38,7 @@ Python 3.12 / FastAPI / SQLAlchemy / NumPy / SciPy / scikit-learn；PostgreSQL 1
 backend/src/{models,schemas,services,routes,controllers,middlewares,constants,config,utils}；backend/scripts/seed_demo.py；backend/migrations/initial.py。
 frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}。
 Role 枚举：admin/analyst/viewer；JobStatus：queued/running/completed/failed。后端 backend/src/constants/enums.py，前端 frontend/src/constants/enums.js；路由权限在 middlewares/auth.py；页面按相同角色控制操作入口。
+独立复测接口前缀 `/api/retests`：`/batches`（GET/POST，analyst+ 接入）、`/trial`（POST，试算不占用）、`/issue`（POST，仅 admin 签发，含 request_key 幂等）、`/vouchers`（GET，支持 ?status=pending|issued）、`/vouchers/{id}/download`（CSV/JSON）。
 
 ## 环境变量与 Docker
 COMPOSE_PROJECT_NAME=survey-pivot；FRONTEND_PORT=18218；BACKEND_PORT=19218；DB_PORT=17718；DB_PASSWORD、JWT_SECRET 见 .env.example；SEED_DEMO 默认 true。共享命名产物卷供后端下载与 worker 写入，数据库/Redis 各持久卷。

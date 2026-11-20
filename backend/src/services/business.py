@@ -33,6 +33,30 @@ def seed_records():
     return result
 
 
+def observation_keys(records):
+    """按 (日, 队, 区域) 辨认观察，供复测重叠辨认。"""
+    keys = set()
+    for record in records:
+        keys.add((str(record["day"]), str(record["team"]), str(record["zone"])))
+    return keys
+
+
+def weighted_delta(result):
+    """从分析结果中取加权 A−B（百分点），用于对照两队差值方向。"""
+    for metric in result.get("metrics", []):
+        if metric.get("label") == "加权A−B":
+            return float(metric["value"])
+    raise ValueError("分析结果缺少加权A−B指标")
+
+
+def direction_of(value):
+    if value > 0:
+        return "A队高于B队"
+    if value < 0:
+        return "B队高于A队"
+    return "两队持平"
+
+
 def _integer(value, name, minimum):
     try:
         answer = float(value)
